@@ -394,3 +394,176 @@ Core: In coordinator-subagent architectures, Coordinator is responsible to provi
 
 
 B is correct: In coordinator-subagent architectures, subagents typically operate with isolated contexts. The Coordinator is responsible for gathering relevant conversation history and document references and explicitly including them in the delegation prompt, which it failed to do here.
+
+
+Refer: https://claudecertificationguide.com/learn/1-agentic-architecture/1-2-orchestration-patterns
+
+
+## 16. Subdomain 1.1: Design and implement agentic loops for autonomous task execution
+
+A developer is implementing an agentic loop for a customer service bot. When the API returns a `stop_reason` of `tool_use`, the application executes the tool successfully. To continue the autonomous execution and allow Claude to reason about the next action, how must the developer pass the result back to the model?
+
+A) Replace the original tool_use block in the assistant's last message with the tool's output. Then, resend the entire modified messages array to the API.
+
+B) Send a new request to the API with the messages array containing the previous history plus a new user message containing the tool_result block.
+
+C) Call the API's dedicated /v1/messages/tool_callback endpoint. The request body should contain the tool_use_id and the tool's JSON output to continue the agentic loop.
+
+D) Append the tool result to the system prompt and initiate a new conversation, sending a request with the updated prompt to ensure the model has the tool's output.
+
+
+---
+pipeline：
+
+                    ┌──────────────────────────────┐
+                    │            User              │
+                    │ "Book me a hotel in Tokyo." │
+                    └──────────────┬───────────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │           Claude             │
+                    │                              │
+                    │ Think...                     │
+                    │                              │
+                    │ I need a tool.               │
+                    │                              │
+                    │ tool_use(FlightSearch)       │
+                    └──────────────┬───────────────┘
+                                   │
+                     stop_reason = tool_use
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │        Application           │
+                    │ (Your Python/Backend Code)   │
+                    │                              │
+                    │ Executes FlightSearch()      │
+                    │                              │
+                    │ Gets:                        │
+                    │ Arrival: Jul 20             │
+                    │ Departure: Jul 26           │
+                    └──────────────┬───────────────┘
+                                   │
+                                   ▼
+      Append a NEW user message containing a structured tool_result
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │ role = "user"                │
+                    │                              │
+                    │ tool_result                  │
+                    │ tool_use_id = xxx            │
+                    │ Arrival: Jul 20             │
+                    │ Departure: Jul 26           │
+                    └──────────────┬───────────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │           Claude             │
+                    │                              │
+                    │ Receives the observation     │
+                    │                              │
+                    │ Thinks again                 │
+                    │                              │
+                    │ "Now I should search hotels" │
+                    │                              │
+                    │ tool_use(HotelSearch)        │
+                    └──────────────────────────────┘
+A is wrong because we never replace the tool use block in the user message prompt.
+
+B is correct since： This is the documented procedure for a client-driven agentic loop. According to Anthropic's official documentation, when a `tool_use` stop reason occurs, the application must send a new request containing the entire previous conversation history, the assistant's message with the `tool_use` block, and a new `user` message that contains the corresponding `tool_result` block. This allows Claude to maintain context and reason about the next step.
+
+C is wrong because Claude does not provide tool callback endpoint. All interactions, including providing tool results, are handled by sending requests to the main `/v1/messages` endpoint with a properly structured `messages` array.
+
+D is wrong because:  The `system` prompt is meant for high-level, persistent instructions, not for transactional data like tool results.
+
+
+Refer: https://claudecertificationguide.com/learn/1-agentic-architecture/1-1-agentic-loops
+
+
+## 17. Subdomain 1.5: Apply Agent SDK hooks for tool call interception and data normalization
+
+An enterprise agent aggregates customer feedback from three distinct platforms using separate MCP tools. The Zendesk tool returns sentiment as a float between -1.0 and 1.0, the App Store tool returns an integer from 1 to 5, and the Twitter tool returns categorical strings ('positive', 'neutral', 'negative'). The model frequently hallucinates when asked to calculate an overall customer satisfaction score due to the mixed data types. What is the most robust architectural approach to resolve this?
+
+A) Implement a PreToolCall hook on all three tools that injects a requested_format="1-100" parameter into the outgoing API requests.
+
+B) Implement a PostToolUse hook that intercepts the responses from all three tools, maps the disparate values to a standardized 1-100 integer scale using custom logic, and returns the normalized schema to the model.
+
+C) Create a separate normalize_sentiment tool and instruct the model to call it sequentially after receiving data from any of the feedback platforms.
+
+D) Update the system prompt with a detailed conversion matrix, instructing the model to mathematically convert all scores to a 1-100 scale before performing any aggregations.
+
+
+---
+
+B is correct since A PostToolUse hook is the most robust location to intercept tool responses before they are returned to the model. By using custom logic in this hook, you can deterministically normalize the mixed data types (floats, integers, and categories) into a single canonical 1-100 scale. This ensures the model receives a consistent schema, significantly reducing cognitive load and the risk of hallucination.
+
+C is wrong: Creating a separate normalization tool increases latency and complexity by requiring multiple tool calls. It relies on the model to correctly orchestrate the sequence, which is less reliable than automatic interception and normalization at the SDK level.
+
+In this case, rather than adding anther subagent to complete this task, a simple posttooluse hook is a better choice.
+
+## 18. Subdomain 1.5: Apply Agent SDK hooks for tool call interception and data normalization
+
+A procurement agent aggregates component prices from three regional suppliers (US, EU, JP) using three different MCP tools. The tools return prices in USD, EUR, and JPY respectively. The model struggles to accurately identify the cheapest supplier due to fluctuating exchange rates. What is the best architectural pattern to solve this?
+
+A) Fine-tune the model on historical exchange rate data so it can perform the conversions natively in its latent space, allowing it to estimate normalized prices without calling any external conversion tool.
+
+B) Implement a PreToolCall hook that injects currency="USD" into the arguments of the EU and JP supplier tools, forcing the tools to return prices in USD so the model can compare them directly.
+
+C) Instruct the model to call a get_exchange_rate tool before any price comparison, then use the returned rates to convert all supplier prices to a common currency within the agent's reasoning step.
+
+D) Implement a PostToolUse hook on all three supplier tools that intercepts the response, fetches the live exchange rate, converts the price to a base currency (e.g., USD), and appends the normalized price to the tool result.
+
+
+---
+Core: This is a very similar question as the previous Question 17
+
+
+D is correct.
+
+
+## 19. Subdomain 1.1: Design and implement agentic loops for autonomous task execution
+
+A developer is building an autonomous research agent using Claude. To determine when the agent has finished its research, the developer's code checks if the assistant's response contains the phrase 'Research complete:'. If this phrase is found, the agent's main loop terminates. What is the architectural assessment of this approach?
+
+A) This is a best practice when the system prompt enforces the exact phrasing of 'Research complete:' using XML tags, and the agent's main loop parses the response for that tag to terminate deterministically.
+
+B) This is an anti-pattern because it relies on parsing non-deterministic natural language for control flow. The developer should instead instruct the model to call a specific tool, such as research_complete(), to signal task completion.
+
+C) This is an anti-pattern; the developer should instead check for a specific stop_sequence like </research_complete> in the API response, and configure the agent to terminate when that sequence is detected.
+
+D) This is an anti-pattern; the developer should instead evaluate if stop_reason equals end_turn to safely and deterministically terminate the loop, avoiding reliance on natural language parsing. By checking the API response's stop_reason field.
+
+
+---
+
+D is correct： The `stop_reason` field provides a deterministic, language‑agnostic mechanism to know why the model stopped generating. In an agent loop, when the model has completed its task and has no further tool calls, `stop_reason` is set to `end_turn`. This offers a reliable programmatic signal for loop termination, eliminating the anti‑pattern of parsing the assistant’s text. This style is demonstrated in Anthropic’s official API documentation and is the behavior used by Claude Code, where the execution loop naturally terminates when the model produces a plain‑text response without tool invocations.
+
+Remember, Do not fully trust the returned natural langauge, Claude returns structure text with `stop_reason` which is deterministic.
+
+Refer: https://claudecertificationguide.com/learn/1-agentic-architecture/1-1-agentic-loops
+
+
+## 20. Subdomain 1.3: Configure subagent invocation, context passing, and spawning
+
+A financial analysis system extracts quarterly earnings data using a 'DataMiner' subagent and generates a chart using a 'Grapher' subagent. When the DataMiner passes its findings back to the coordinator as a conversational summary, and the coordinator passes that summary to the Grapher, the Grapher frequently plots incorrect numbers or mislabels axes. What is the most robust architectural solution to this context passing issue?
+
+A) Configure the Grapher subagent's AgentDefinition to use a lower temperature setting so that it relies more heavily on the coordinator's prompt and reduces spontaneous numerical variations during chart generation.
+
+B) Add a DataValidation tool to the coordinator that compares the Grapher's output against the DataMiner's summary and flags discrepancies in axis labels or plotted numbers before the chart is presented to the user.
+
+C) Instruct the DataMiner to output its findings as a structured CSV or JSON array, and have the coordinator pass this exact structured output in the prompt to the Grapher subagent.
+
+D) Use fork-based session management to allow the Grapher to iteratively query the DataMiner in a private thread, replotting the chart each time until the plotted values match the expected quarterly earnings data.
+
+
+---
+
+
+principal： Avoiding direct communication between subagents, the ideal case is sending structured result from subagent to coordinator agent, and coordinator send structured prompt for Grapher subagent.
+
+C is correct. Instructing the DataMiner to output its findings as a structured CSV or JSON array ensures that exact, machine-readable numeric and field semantics are preserved. This eliminates the ambiguity introduced by free-form conversational summaries, allowing the Grapher to process concrete values and labels directly. This is the most robust way to maintain data integrity across subagent boundaries.
+
+
+Refer: https://claudecertificationguide.com/learn/1-agentic-architecture/1-3-subagent-invocation-context
