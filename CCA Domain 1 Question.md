@@ -567,3 +567,332 @@ C is correct. Instructing the DataMiner to output its findings as a structured C
 
 
 Refer: https://claudecertificationguide.com/learn/1-agentic-architecture/1-3-subagent-invocation-context
+
+
+## 21. Subdomain 1.7: Manage session state, resumption, and forking
+
+In an agentic architecture using Claude, what is a recommended practice for managing session state and resuming a conversation when built-in session persistence is not available?
+
+A) Save the terminal output to a text file and upload it to a new Claude session later.
+
+B) Start the session initially with a named identifier and use `--resume <session-name>` when returning to continue the specific prior conversation.
+
+C) Ask Claude to generate a structured summary, then paste that summary into a new session.
+
+D) Use the `fork_session` command before closing the terminal to ensure the state is saved in a parallel branch.
+
+
+---
+
+C is correct as: Anthropic's official documentation and best practices recommend asking Claude to generate a structured summary (a 'handoff document') of the current conversation, including what was done, what worked, and next steps. This summary can then be used as the initial context for a new session, providing continuity while ensuring a clean and focused context. This is especially useful when output quality begins to degrade due to a large context window.
+
+B and D are wrong because both rely on the built in seesion persistence.
+
+## 22. Subdomain 1.1: Design and implement agentic loops for autonomous task execution
+
+An agentic loop includes a `capture_screenshot` tool. When Claude calls this tool, the application successfully captures a base64-encoded PNG image of the current web page. The developer needs to pass this image back to Claude so it can analyze the UI and decide on the next action. How should the developer construct the `tool_result` block to include the image?
+
+A) Convert the base64 image to a URL and pass the URL as a plain text string inside the tool_result block.
+
+B) Include an image content block containing the base64 data and media type within the content array of the tool_result block.
+
+C) Images cannot be passed inside tool_result blocks; the developer must restart the conversation and provide the image in the initial prompt.
+
+D) Append the image as a separate user message immediately following the user message that contains the tool_result block.
+
+
+---
+
+B is correct. In the Anthropic Messages API, the 'tool_result' block contains a 'content' field that accepts an array of content blocks. This array can include 'text' blocks and 'image' blocks (containing base64 data and the media type), allowing Claude to receive and analyze the visual output of the screenshot tool.
+
+D is wrong as: Tool results must be returned in a message with the 'user' role that specifically includes a tool_result block corresponding to the model's tool_use request. Appending a separate user message breaks the specific tool-calling handshake protocol.
+
+A is wrong because: Passing a URL as a plain text string does not allow Claude to process the image data visually.
+
+
+## 23. Subdomain 1.2: Orchestrate multi-agent systems with coordinator-subagent patterns
+
+A financial firm uses a Coordinator agent to interact with users about uploaded 100-page annual reports. When a user asks for a risk analysis, the Coordinator delegates to a RiskSubagent. To save tokens, the developer configures the Coordinator to only send the user's specific question to the RiskSubagent, assuming the subagent can access the uploaded document from the session state. The subagent consistently returns generic, unhelpful answers. What must the developer change?
+
+
+A) Upgrade the RiskSubagent to a more advanced model tier with a larger context window so it can automatically infer the necessary document details from the shared session state.
+
+B) Configure the RiskSubagent with a web search tool. The subagent should then be prompted to extract the company name from the user's query to find and analyze the report online.
+
+C) Explicitly extract and pass the relevant chunks of the annual report from the Coordinator to the RiskSubagent, as subagents operate with isolated context.
+
+D) Remove the Coordinator agent entirely. This change allows the user to chat directly with the RiskSubagent, which can then access the full document from the shared session state.
+
+
+---
+
+
+C is correct as In a coordinator-subagent architecture, subagents generally operate with isolated context windows. Each API call to a subagent must include the relevant information needed for that specific task. By extracting and passing specific chunks (a RAG approach), the developer ensures the subagent has the necessary context to perform the risk analysis while still maintaining token efficiency compared to sending the full 100-page report.
+
+B is incorrect as Web search is an unreliable and inefficient substitute for the document already provided to the system. It risks retrieving incorrect versions, may fail for private/internal documents, and introduces unnecessary latency and privacy concerns.
+
+A is unnesseccary as Upgrading the model tier may improve general reasoning, but it does not fix the root cause of the failure.
+
+
+## 24. Subdomain 1.7: Manage session state, resumption, and forking
+
+An infrastructure engineer uses Claude to write a Terraform script that provisions a complex multi-region AWS environment. Claude executes the `terraform apply` command via a tool, which takes 45 minutes to complete. The engineer closes the session. An hour later, the infrastructure is fully provisioned, but several AWS ARNs generated during the process need to be mapped into an application configuration file. What is the most efficient way to use Claude for this mapping task?
+
+A) Use `fork_session` from the moment before `terraform apply` was executed, and ask Claude to predict the ARNs based on the Terraform plan.
+
+B) Start a new session with a structured summary of the goal and provide the newly generated Terraform state file or outputs, as the previous session's tool results are stale.
+
+C) Resume the previous session, as Claude's context window will automatically poll the AWS API to update the ARNs once the session is reawakened.
+
+D) Resume the previous session and ask Claude to read the terminal history to find the ARNs, as tool execution outputs are always perfectly preserved across session closures.
+
+
+---
+
+B is correct： Starting a new session with a concise summary and providing the current source of truth (Terraform state or outputs) is the most efficient and reliable method. Because the previous session's tool outputs may be outdated, truncated, or difficult to retrieve after a long delay and session closure, providing the actual generated state ensures Claude has the most accurate information.
+
+C is wrong： because Claude does not have the capability to automatically poll external APIs like AWS or refresh infrastructure state on its own when a session is resumed. External state changes must be provided to the model manually or via a tool call.
+
+## 25. Subdomain 1.4: Implement multi-step workflows with enforcement and handoff patterns
+
+A travel booking bot using Claude is processing a complex flight cancellation. Mid-process, the airline API returns a 'manual intervention required' error. The bot must escalate to a human agent immediately, but the human agents' CRM system does not support importing chat transcripts. How should the architect design this mid-process escalation?
+
+A) Trigger a structured handoff protocol where Claude requests a `compile_handoff` tool, and the application executes it to generate a summary containing the customer ID, root cause, and recommended action to populate the CRM.
+
+B) Send the raw JSON array of the conversation history to the CRM so the human agent can parse the tool calls and API errors manually.
+
+C) Prompt the bot to ask the user to write a brief summary of the steps they just performed before triggering the escalation webhook.
+
+D) Programmatically extract all user messages from the session state using `get_session_messages()`, concatenate them into a single text block, and send it to the CRM.
+
+
+---
+
+A is correct, claude call the tool use and the pre-defined app start to execute the handoff process.
+
+
+
+## 26. Subdomain 1.1: Design and implement agentic loops for autonomous task execution
+
+An agentic loop is executing a long-running data analysis task. After the agent calls the fetch_data tool, the application detects that the user has clicked a "Cancel" button on the frontend. The developer wants to gracefully interrupt the agent's current plan and instruct it to summarize what it has found so far, rather than continuing to analyze. How should the architect inject this interruption instruction into the active agentic loop?
+
+A) Replace the tool_result block entirely with a text block containing the instruction, as sending a tool_result will force the model to continue its original plan.
+
+B) Call the /v1/messages/cancel endpoint to terminate the current loop, then start a completely new conversation thread asking for a summary.
+
+C) Include a text content block containing the interruption instruction alongside the tool_result block within the next user message.
+
+D) Modify the stop_reason of the previous API response to user_cancelled before appending it to the conversation history.
+
+
+---
+
+C is correct as This is the standard and most effective pattern for human-in-the-loop intervention in Anthropic agentic workflows. By providing both the tool_result (to satisfy the API requirements and provide the data) and a text block (containing the new 'summarize' instruction) in the same user turn, the architect can pivot the model's behavior while maintaining the full context of the session.
+
+B is wrong as： There is no standard /v1/messages/cancel API endpoint that handles loop redirection.
+
+D is wrong as： The stop_reason is a read-only metadata field returned by the Claude API (e.g., end_turn, tool_use, max_tokens) to explain why generation stopped. It is not an input parameter for the Messages API, and modifying it in the message history will not influence the model's future logic or handle a user interruption.
+
+
+## 27. Subdomain 1.4: Implement multi-step workflows with enforcement and handoff patterns
+
+A telecommunications customer asks a support bot: 'Why is my bill so high this month, and can I upgrade to the premium plan?' To ensure low latency and high accuracy, how should the architect design the workflow for this multi-concern request?
+
+A) Prompt the main agent to use the check_bill and upgrade_plan tools in a single turn, relying on the LLM's internal parallel tool calling capabilities without shared context.
+
+B) Process the request sequentially: first resolve the billing issue, then handle the upgrade, to avoid confusing the model's context window.
+
+C) Use a router to decompose the request into 'billing' and 'upgrade' tasks, dispatch them to parallel sub-agents with shared user context, and use a synthesizer agent to merge the results.
+
+D) Send the raw prompt to two separate agents simultaneously and concatenate their raw text responses with a newline character before sending to the user.
+
+
+---
+
+Core: The most efficient way and most accurate way is to use a main agent to assign small tasks for subagent, and they run in parallel.
+
+C is correct: The router-orchestrator pattern is the most effective for multi-intent requests. Decomposing the prompt into specialized tasks allows for parallel execution (minimizing latency) and high domain-specific accuracy. Using shared context and a synthesizer ensures the final response is coherent, consistent, and addresses all user concerns accurately.
+
+
+## 28. Subdomain 1.6: Design task decomposition strategies for complex workflows
+
+A media company uses an AI agent to review 3-hour video transcripts for brand safety, narrative consistency, and pacing. Initially, the entire transcript was processed in one prompt, but the model hallucinated events due to attention dilution. The architect split the workflow into 10-minute local analysis chunks. Now, the agent accurately flags local brand safety issues but completely misses narrative inconsistencies that span across the entire video. How should the architect resolve this?
+
+A) Revert to a single prompt but use strict XML tags to separate the 10-minute chunks within the context window.
+
+B) Switch the entire workflow to dynamic adaptive decomposition so the agent can autonomously decide which 10-minute chunks to read.
+
+C) Increase the model's temperature and use a map-reduce pattern to process all chunks in parallel without a final integration step.
+
+D) Implement a cross-file integration pass that analyzes the summarized narrative outputs from the local chunk passes to evaluate global consistency.
+
+
+---
+
+D is correct to integral local chunk results to ensure global consistency.
+
+
+## 29. Subdomain 1.3: Configure subagent invocation, context passing, and spawning
+
+A creative writing application generates a comprehensive baseline plot outline. From this single outline, the system needs to generate three distinct story endings (optimistic, pessimistic, and ambiguous). The architect wants to ensure the generations do not influence each other, while avoiding the latency and cost of having the model re-read and re-process the baseline outline from scratch for each ending. Which approach best satisfies these requirements?
+
+
+A) Use fork-based session management to create three separate branches from the conversation state immediately following the baseline outline generation.
+
+B) Spawn three parallel subagents using the Task tool, passing the baseline outline in the prompt of each subagent.
+
+C) Define three separate AgentDefinition configurations with different system prompts and invoke them sequentially in the same session.
+
+D) Configure the coordinator to emit three sequential Task tool calls, clearing the context window between each call to prevent cross-contamination.
+
+
+---
+
+A is correct： Anthropic’s fork-based session management (e.g., via `/branch` in Claude Code or the `--fork-session` CLI flag) copies the entire conversation history up to the baseline outline into three independent branches. Because the shared prefix is cached by the API, subsequent generations in each branch reuse the cached baseline tokens, reducing both latency (near-instant) and cost (cached tokens are ~90% cheaper). This approach perfectly satisfies the requirements of independence and efficiency.
+
+
+## 30. Subdomain 1.6: Design task decomposition strategies for complex workflows
+
+A healthcare platform processes standard patient intake forms to extract demographic data, and then investigates complex, open-ended medical histories to suggest potential clinical trials. The engineering team needs to design the orchestration layer for these two distinct tasks. Which combination of decomposition patterns is most appropriate?
+
+A) Dynamic adaptive decomposition for the intake forms, and a fixed sequential pipeline for the clinical trial investigation.
+
+B) Fixed sequential pipeline for both the intake forms and the clinical trial investigation.
+
+C) A fixed sequential pipeline for the intake forms, and dynamic adaptive decomposition for the clinical trial investigation.
+
+D) Dynamic adaptive decomposition for both the intake forms and the clinical trial investigation.
+
+
+---
+
+C is correct： This approach matches the orchestration complexity to the task requirements. A fixed sequential pipeline provides reliability and efficiency for the predictable, structured extraction of demographic data. Conversely, dynamic adaptive decomposition allows the agent to iteratively explore complex, unstructured medical histories and synthesize trial suggestions based on context-specific reasoning.
+
+
+## 31. Subdomain 1.7: Manage session state, resumption, and forking
+
+A systems administrator is using Claude to analyze a massive `access.log` file to track down the source of a DDoS attack. Claude has read several chunks of the file and identified a suspicious IP range. At midnight, the server's log rotation daemon archives `access.log` to `access.log.1` and creates a fresh, empty `access.log`. The sysadmin wants to continue the investigation the next morning. How should the sysadmin proceed with the session?
+
+A) Resume the session and explicitly inform Claude about the log rotation, directing it to analyze `access.log.1` instead of the now-empty `access.log`.
+
+B) Resume the session and ask Claude to continue reading `access.log`; the agent will automatically realize the file is empty and search the directory for the archive.
+
+C) Start a new session, because external log rotation permanently corrupts the file pointers in Claude's existing context window.
+
+D) Use `fork_session` to branch the state, which automatically detects the inode change and redirects Claude's file-reading tools to the archived log.
+
+
+---
+A is correct： Resuming the existing session allows Claude to retain its prior reasoning and findings (such as the identified IP range). Since Claude cannot independently track OS-level filesystem changes like log rotation, the user must explicitly provide the new path (access.log.1) to ensure continuity without losing progress.
+
+Because Claude does not track down the system log file, he still think the previous one is the original one.
+
+
+## 32. Subdomain 1.6: Design task decomposition strategies for complex workflows
+
+An autonomous red-teaming agent is given a target IP address to perform a penetration test. The agent's next actions are completely unknown until the initial port scan returns results (e.g., finding an open FTP port requires different tools than finding an exposed web API). Which decomposition strategy is required for this agent?
+
+A) First mapping the network structure, then using a fixed prompt chain.
+
+B) A cross-file integration pass of all historical scan logs.
+
+C) Dynamic adaptive decomposition based on intermediate findings.
+
+D) A fixed sequential pipeline of all known exploits.
+
+
+---
+
+C is correct： Dynamic adaptive decomposition is the appropriate strategy for situations where intermediate findings determine the next subtask and tool choice. This allows the agent to inspect real-time scan results and then decide whether to pursue specific service workflows (like FTP or web APIs), ensuring flexibility and responsiveness to discovered conditions.
+
+
+## 33. Subdomain 1.5: Apply Agent SDK hooks for tool call interception and data normalization
+
+A supply chain agent receives automated inventory alerts via a `get_alerts` tool. The tool's API only returns raw SKU codes (e.g., 'SKU-992'). The model needs the human-readable product name and category to draft meaningful emails to suppliers. Prompting the model to sequentially call a `lookup_sku` tool for every alert introduces unacceptable latency and token costs. What is the most efficient architectural solution?
+
+A) Implement a PostToolUse hook on `get_alerts` that intercepts the raw SKU array, queries a fast in-memory cache for the product details, and appends the enriched data to the tool result before the model processes it.
+
+B) Implement a PreToolCall hook on `get_alerts` that injects a `include_metadata=true` parameter, assuming the external API will automatically adapt to the new parameter.
+
+C) Combine the `get_alerts` and `lookup_sku` tools into a single prompt instruction, forcing the model to execute them in parallel.
+
+D) Fine-tune the model on the company's entire product catalog so it can natively map SKU codes to product names from memory.
+
+
+---
+
+A is correct, again, trigger and postTooluse took is always efficient and cheap than another prompt for easy task.
+
+
+## 34. Subdomain 1.1: Design and implement agentic loops for autonomous task execution
+
+Claude returns a `stop_reason` of `tool_use` with three `tool_use` blocks in a single response. The developer executes all three tools successfully. To append the results to the conversation history, the developer creates three separate `user` messages, each containing one `tool_result` block, and appends them sequentially to the `messages` array. What is the architectural flaw in this implementation of the agentic loop?
+
+A) The `tool_result` blocks must be merged into a single JSON array within a `system` message, rather than using `user` messages.
+
+B) The Anthropic API requires strictly alternating `user` and `assistant` messages; all three `tool_result` blocks must be placed inside a single `user` message.
+
+C) The developer must append an `assistant` message acknowledging each `tool_result` between the `user` messages to maintain the conversation flow.
+
+D) Multiple `tool_result` blocks cannot be processed in a single iteration; the developer must force Claude to request one tool at a time using `disable_parallel_tool_use`.
+
+
+---
+
+B is correct: The Anthropic Messages API enforces a strictly alternating pattern between 'user' and 'assistant' roles. When Claude generates multiple 'tool_use' blocks in a single assistant message, the corresponding 'tool_result' blocks must be returned collectively within the next single 'user' message to maintain this pattern.
+
+
+## 35. Subdomain 1.5: Apply Agent SDK hooks for tool call interception and data normalization
+
+A global logistics agent uses three different MCP tools to query delivery statuses from regional carriers. Tool A returns timestamps in Unix epoch, Tool B uses ISO 8601, and Tool C uses DD-MM-YYYY format. The model occasionally miscalculates delivery SLAs because it misinterprets the heterogeneous date formats. As an architect, how should you resolve this issue to guarantee accurate SLA calculations?
+
+A) Implement a PostToolUse hook that detects the tool source, parses the specific date format into a standard ISO 8601 string, and replaces the raw output before returning the result to the model.
+
+B) Update the system prompt with few-shot examples that show the model how to convert Unix epoch and DD-MM-YYYY timestamps into ISO 8601 before performing SLA calculations, ensuring consistent date handling across all carrier tools.
+
+C) Create a separate DateConverter tool that the model calls via the system prompt whenever it receives a date from the logistics tools, converting Unix epoch and DD-MM-YYYY values into ISO 8601 before SLA calculations.
+
+D) Implement a PreToolCall hook that injects a requested_format="ISO8601" parameter into the outgoing tool arguments for all three carrier tools, so that every response arrives in a uniform format for SLA computation.
+
+
+---
+
+A is correct: Implementing a PostToolUse hook is the architectural best practice for data normalization in agentic workflows. By intercepting the tool output and standardizing the date formats before the data reaches the model, you ensure that the model always receives consistent, high-quality data. This centralizes the logic and decouples data parsing from the LLM's reasoning.
+
+
+## 36. Subdomain 1.7: Manage session state, resumption, and forking
+
+An AI architect is currently managing two active sessions: Session A, which contains a large volume of raw system logs, and Session B, which contains the historical context and ongoing reasoning for a root cause analysis. The architect now needs to continue the root cause investigation and also begin a separate architecture analysis for a proposed fix. Which session management strategy is most appropriate?
+
+A) Resume Session B; Start a new session for the architecture analysis.
+
+B) Resume both Session A and Session B, as Claude can automatically detect stale log data.
+
+C) Resume Session A; Start a new session for the log queries with a summary of the incident.
+
+D) Start new sessions for both tasks, as any interruption requires a fresh context window.
+
+
+---
+
+A is correct as: This approach aligns with session management best practices. Resuming Session B preserves the valuable reasoning and narrative history of the investigation (stable context). Starting a new session for the architecture analysis ensures a clean, focused context window for the new task, isolating it from the investigation's history and preventing token waste.
+
+
+## 37. Subdomain 1.2: Orchestrate multi-agent systems with coordinator-subagent patterns
+
+An HR assistant bot handles employee queries using a Coordinator and several subagents (PolicyAnalyzer, BenefitsCalculator, GeneralQA). For a simple query like "What are the cafeteria hours?", the bot takes 45 seconds to respond because the Coordinator routes the query through all subagents in a fixed pipeline before synthesizing the answer. Which design change will most effectively reduce latency for simple queries?
+
+A) Redesign the Coordinator to evaluate query complexity upfront and dynamically route simple queries directly to the GeneralQA subagent, bypassing the others.
+
+B) Broadcast the query to all subagents simultaneously and configure the Coordinator to immediately output the first response it receives.
+
+C) Program the PolicyAnalyzer and BenefitsCalculator to return empty strings faster if they determine the query is irrelevant to their domain.
+
+D) Deploy the subagents on faster, dedicated hardware to reduce the execution time of the fixed pipeline.
+
+
+---
+
+A is correct: Evaluating query complexity and intent upfront allows the Coordinator to implement dynamic routing. By identifying simple queries and routing them directly to the GeneralQA subagent, the system bypasses the overhead of the specialized subagents entirely. This 'fast path' eliminates unnecessary sequential processing, significantly reducing latency and compute costs.
+
+B is wrong: Broadcasting queries to all subagents in parallel can reduce wall-clock time, but taking the 'first response' is dangerous in an HR context. It introduces non-determinism and risks providing inaccurate information if a specialized agent provides a generic but incomplete answer faster than the appropriate agent. It also wastes significant computational resources and does not solve the root problem of the fixed pipeline.
